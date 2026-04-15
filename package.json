@@ -1,1 +1,12 @@
-{"name":"ayse-whatsapp-server","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"}}
+{
+  "name": "ayse-whatsapp-server",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "sip.js": "^0.21.2",
+    "node-sip": "^0.1.3"
+  }
+}
