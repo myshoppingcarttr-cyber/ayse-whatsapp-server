@@ -37,7 +37,7 @@ async function sendEmail(to,subject,html){
   if(!gmailTransporter)return null;
   try{
     const info=await gmailTransporter.sendMail({
-      from:'"Global Exbina - Ayşe AI" <'+GMAIL_USER+'>',
+      from:'"Global Exbina - AyÅe AI" <'+GMAIL_USER+'>',
       to,subject,html
     });
     console.log('Email sent to',to);
@@ -47,7 +47,7 @@ async function sendEmail(to,subject,html){
 
 function genLeadCode(){return 'LEAD-'+Math.floor(1000+Math.random()*9000);}
 
-// Phone normalize - hem DB format (10 haneli) hem VAPI format (+90...) için
+// Phone normalize - hem DB format (10 haneli) hem VAPI format (+90...) iÃ§in
 function normPhone(raw){
   if(!raw)return'';
   let p=(''+raw).replace(/[^\d+]/g,'');
@@ -61,7 +61,7 @@ function normPhone(raw){
   return p;
 }
 
-// === FOREX / CRYPTO / COMMODITIES API — ücretsiz, cache'li ===
+// === FOREX / CRYPTO / COMMODITIES API â Ã¼cretsiz, cache'li ===
 let priceCache={data:null,time:0};
 const CACHE_MS=60000; // 1 dakika cache
 
@@ -71,8 +71,8 @@ async function getLivePrices(){
   }
   const prices={};
   try{
-    // Altın + Gümüş + Brent: metals-api (tier-free) veya fallback
-    // 1. Gold price API (açık, rate-limit yok)
+    // AltÄ±n + GÃ¼mÃ¼Å + Brent: metals-api (tier-free) veya fallback
+    // 1. Gold price API (aÃ§Ä±k, rate-limit yok)
     const goldR=await req({hostname:'api.gold-api.com',path:'/price/XAU',method:'GET',headers:{'User-Agent':'GlobalEksbina/1.0'}});
     if(goldR?.price)prices.gold_usd=parseFloat(goldR.price).toFixed(2);
     
@@ -80,12 +80,12 @@ async function getLivePrices(){
     const silverR=await req({hostname:'api.gold-api.com',path:'/price/XAG',method:'GET',headers:{'User-Agent':'GlobalEksbina/1.0'}});
     if(silverR?.price)prices.silver_usd=parseFloat(silverR.price).toFixed(2);
     
-    // 3. Bitcoin - Coingecko (ücretsiz, rate-limit yumuşak)
+    // 3. Bitcoin - Coingecko (Ã¼cretsiz, rate-limit yumuÅak)
     const cgR=await req({hostname:'api.coingecko.com',path:'/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd',method:'GET',headers:{'User-Agent':'GlobalEksbina/1.0'}});
     if(cgR?.bitcoin?.usd)prices.btc_usd=cgR.bitcoin.usd;
     if(cgR?.ethereum?.usd)prices.eth_usd=cgR.ethereum.usd;
     
-    // 4. Forex (EURUSD, GBPUSD, USDTRY) - exchangerate-api (ücretsiz)
+    // 4. Forex (EURUSD, GBPUSD, USDTRY) - exchangerate-api (Ã¼cretsiz)
     const fxR=await req({hostname:'open.er-api.com',path:'/v6/latest/USD',method:'GET',headers:{'User-Agent':'GlobalEksbina/1.0'}});
     if(fxR?.rates){
       prices.eurusd=(1/fxR.rates.EUR).toFixed(4);
@@ -102,38 +102,38 @@ async function getLivePrices(){
   }
 }
 
-// Ayşe için okunabilir fiyat metni üret
+// AyÅe iÃ§in okunabilir fiyat metni Ã¼ret
 function formatPricesForAyse(p){
-  if(!p||p.error)return 'Şu an fiyat bilgisi alamıyorum, uzmanımız görüşmede size güncel rakamları verecek';
+  if(!p||p.error)return 'Åu an fiyat bilgisi alamÄ±yorum, uzmanÄ±mÄ±z gÃ¶rÃ¼Åmede size gÃ¼ncel rakamlarÄ± verecek';
   const lines=[];
-  if(p.gold_usd)lines.push('altın '+p.gold_usd+' dolar');
+  if(p.gold_usd)lines.push('altÄ±n '+p.gold_usd+' dolar');
   if(p.btc_usd)lines.push('bitcoin '+Math.round(p.btc_usd).toLocaleString('tr-TR')+' dolar');
   if(p.eurusd)lines.push('euro dolar paritesi '+p.eurusd);
   if(p.usdtry)lines.push('dolar '+p.usdtry+' lira');
-  return 'Şu an canlı piyasada: '+lines.join(', ');
+  return 'Åu an canlÄ± piyasada: '+lines.join(', ');
 }
 
 function buildEmailHtml(lead,forStaff=false){
-  const MODEL={demo_only:'1 ay ücretsiz demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
-  const INT={high:'🟢 YÜKSEK',medium:'🟡 ORTA',low:'🔴 DÜŞÜK'};
-  const CHAN={phone:'📞 Telefon',whatsapp:'💬 WhatsApp',email:'📧 Email'};
+  const MODEL={demo_only:'1 ay Ã¼cretsiz demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'KararsÄ±z'};
+  const INT={high:'ð¢ YÃKSEK',medium:'ð¡ ORTA',low:'ð´ DÃÅÃK'};
+  const CHAN={phone:'ð Telefon',whatsapp:'ð¬ WhatsApp',email:'ð§ Email'};
   const crmLink=CRM_BASE+'&customer='+(lead.customer_id||'');
-  const headerTxt=forStaff?'SİZE ATANAN YENİ LEAD':'SICAK LEAD BİLDİRİMİ';
+  const headerTxt=forStaff?'SÄ°ZE ATANAN YENÄ° LEAD':'SICAK LEAD BÄ°LDÄ°RÄ°MÄ°';
   return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f7f5f0">'+
     '<div style="background:#181418;padding:28px 24px;border-bottom:4px solid #C9A96E">'+
-      '<div style="color:#C9A96E;font-size:22px;font-weight:900;letter-spacing:2px">GLOBAL EXBİNA</div>'+
+      '<div style="color:#C9A96E;font-size:22px;font-weight:900;letter-spacing:2px">GLOBAL EXBÄ°NA</div>'+
       '<div style="color:#7B6EA8;font-size:11px;letter-spacing:3px;margin-top:6px">'+headerTxt+'</div>'+
     '</div>'+
     '<div style="background:#fff;padding:24px">'+
-      '<div style="background:#C9A96E;color:#181418;padding:8px 16px;border-radius:6px;display:inline-block;font-weight:700;font-size:14px">'+(lead.lead_code||'—')+'</div>'+
-      '<h2 style="color:#181418;margin:16px 0 4px;font-size:22px">'+(lead.full_name||'—')+'</h2>'+
+      '<div style="background:#C9A96E;color:#181418;padding:8px 16px;border-radius:6px;display:inline-block;font-weight:700;font-size:14px">'+(lead.lead_code||'â')+'</div>'+
+      '<h2 style="color:#181418;margin:16px 0 4px;font-size:22px">'+(lead.full_name||'â')+'</h2>'+
       '<div style="color:#888;font-size:13px;margin-bottom:20px">'+(INT[lead.interest_level]||'')+' ilgi seviyesi</div>'+
       '<table style="width:100%;border-collapse:collapse;margin:16px 0">'+
-        '<tr><td style="padding:10px 0;color:#666;width:150px;border-bottom:1px solid #eee">Telefon</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee"><a href="tel:'+(lead.phone||'')+'" style="color:#C9A96E;text-decoration:none">'+(lead.phone||'—')+'</a></td></tr>'+
-        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Randevu</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(lead.preferred_datetime||'—')+'</td></tr>'+
-        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Model</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(MODEL[lead.selected_model]||'—')+'</td></tr>'+
+        '<tr><td style="padding:10px 0;color:#666;width:150px;border-bottom:1px solid #eee">Telefon</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee"><a href="tel:'+(lead.phone||'')+'" style="color:#C9A96E;text-decoration:none">'+(lead.phone||'â')+'</a></td></tr>'+
+        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Randevu</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(lead.preferred_datetime||'â')+'</td></tr>'+
+        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Model</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(MODEL[lead.selected_model]||'â')+'</td></tr>'+
       '</table>'+
-      '<div style="margin-top:28px;text-align:center"><a href="'+crmLink+'" style="display:inline-block;background:#C9A96E;color:#181418;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:700">CRM\'DE AÇ →</a></div>'+
+      '<div style="margin-top:28px;text-align:center"><a href="'+crmLink+'" style="display:inline-block;background:#C9A96E;color:#181418;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:700">CRM\'DE AÃ â</a></div>'+
     '</div></div>';
 }
 
@@ -154,17 +154,17 @@ async function handleSaveLead(args,callId){
   const lead_code=genLeadCode();
   const full_name=(args.full_name||'').trim();
   const phone=normPhone(args.phone);
-  const MODELS={demo_only:'1 ay demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
-  const INT={high:'Yüksek',medium:'Orta',low:'Düşük'};
-  const notesText=['['+lead_code+']','🤖 Ayşe AI araması ('+new Date().toLocaleString('tr-TR')+')','📅 Randevu: '+(args.preferred_datetime||'-'),'🎯 Model: '+(MODELS[args.selected_model]||'-'),'🔥 İlgi: '+(INT[args.interest_level]||'-'),args.objection?'⚠️ İtiraz: '+args.objection:'',args.notes?'📝 '+args.notes:''].filter(Boolean).join('\n');
+  const MODELS={demo_only:'1 ay demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'KararsÄ±z'};
+  const INT={high:'YÃ¼ksek',medium:'Orta',low:'DÃ¼ÅÃ¼k'};
+  const notesText=['['+lead_code+']','ð¤ AyÅe AI aramasÄ± ('+new Date().toLocaleString('tr-TR')+')','ð Randevu: '+(args.preferred_datetime||'-'),'ð¯ Model: '+(MODELS[args.selected_model]||'-'),'ð¥ Ä°lgi: '+(INT[args.interest_level]||'-'),args.objection?'â ï¸ Ä°tiraz: '+args.objection:'',args.notes?'ð '+args.notes:''].filter(Boolean).join('\n');
   let customer_id=null,assignedAgent=null;
-  // Aramada kullanılan phone, DB'de 10 haneli form olabilir - her iki format ile ara
+  // Aramada kullanÄ±lan phone, DB'de 10 haneli form olabilir - her iki format ile ara
   const phoneVariants=[phone, phone.replace('+90',''), phone.replace('+','')];
   for(const pv of phoneVariants){
     const existing=await sb('GET','customers?phone=eq.'+encodeURIComponent(pv)+'&select=id,notes,assigned_to').catch(()=>null);
     if(Array.isArray(existing)&&existing[0]){
       customer_id=existing[0].id;
-      const mergedNotes='['+lead_code+']\n'+notesText+(existing[0].notes?'\n\n--- Önceki ---\n'+existing[0].notes:'');
+      const mergedNotes='['+lead_code+']\n'+notesText+(existing[0].notes?'\n\n--- Ãnceki ---\n'+existing[0].notes:'');
       if(existing[0].assigned_to){
         const agRow=await sb('GET','users?id=eq.'+existing[0].assigned_to+'&select=id,full_name').catch(()=>null);
         if(Array.isArray(agRow)&&agRow[0])assignedAgent=agRow[0];
@@ -182,11 +182,11 @@ async function handleSaveLead(args,callId){
     await sb('POST','calls',{vapi_call_id:callId,customer_id,agent_id:assignedAgent?.id||null,call_type:'outbound',status:'completed',outcome:'appointment_booked',randevu_alindi:true,skor:args.interest_level==='high'?90:args.interest_level==='medium'?60:30,ilgi_seviyesi:args.interest_level,itiraz:args.objection||null,satis_durumu:'appointment_requested',etiket:lead_code,notes:notesText}).catch(()=>{});
   }
   const emailData={lead_code,customer_id,full_name,phone,preferred_datetime:args.preferred_datetime,preferred_channel:args.preferred_channel,selected_model:args.selected_model,interest_level:args.interest_level,objection:args.objection,notes:args.notes};
-  sendEmail(EXPERT_EMAIL,'🔥 ['+lead_code+'] Yeni sıcak lead: '+full_name,buildEmailHtml(emailData)).catch(()=>{});
+  sendEmail(EXPERT_EMAIL,'ð¥ ['+lead_code+'] Yeni sÄ±cak lead: '+full_name,buildEmailHtml(emailData)).catch(()=>{});
   if(assignedAgent&&STAFF_EMAIL_MAP[assignedAgent.id]){
-    sendEmail(STAFF_EMAIL_MAP[assignedAgent.id],'🔥 ['+lead_code+'] Size atandı: '+full_name,buildEmailHtml(emailData,true)).catch(()=>{});
+    sendEmail(STAFF_EMAIL_MAP[assignedAgent.id],'ð¥ ['+lead_code+'] Size atandÄ±: '+full_name,buildEmailHtml(emailData,true)).catch(()=>{});
   }
-  wa(ADMIN_WA,'🔥 LEAD '+lead_code+' '+full_name+' '+phone+' '+(MODELS[args.selected_model]||'-')).catch(()=>{});
+  wa(ADMIN_WA,'ð¥ LEAD '+lead_code+' '+full_name+' '+phone+' '+(MODELS[args.selected_model]||'-')).catch(()=>{});
   return lead_code;
 }
 
@@ -228,16 +228,16 @@ async function makeCall(customer_id,phone_override){
   const result=await vapi('POST','call',{
     assistantId:ASSISTANT_ID,
     phoneNumberId:PHONE_NUMBER_ID,
-    customer:{number:phone,name:customer?.full_name||'Müşteri'}
+    customer:{number:phone,name:customer?.full_name||'MÃ¼Återi'}
   });
   
   if(result?.id){
     await sb('POST','calls',{
       vapi_call_id:result.id,customer_id:customer?.id||null,call_type:'outbound',status:'initiated',
-      notes:'🤖 Ayşe AI outbound - '+new Date().toLocaleString('tr-TR')
+      notes:'ð¤ AyÅe AI outbound - '+new Date().toLocaleString('tr-TR')
     }).catch(()=>{});
     if(customer?.id){
-      await sb('PATCH','customers?id=eq.'+customer.id,{status:'aranıyor',last_contact:new Date().toISOString()}).catch(()=>{});
+      await sb('PATCH','customers?id=eq.'+customer.id,{status:'aranÄ±yor',last_contact:new Date().toISOString()}).catch(()=>{});
     }
     return {ok:true,call_id:result.id,phone,customer_name:customer?.full_name};
   }
@@ -247,9 +247,14 @@ async function makeCall(customer_id,phone_override){
 async function bulkCalls(params){
   const {filter={},limit=10,concurrent=2,delay_ms=3000}=params;
   const actualLimit=Math.min(limit,100);
-  let query='customers?select=id,full_name,phone,status&limit='+actualLimit;
+  // Son 1 saatte aranmış olanları hariç tut
+  const oneHourAgo=new Date(Date.now()-3600000).toISOString();
+  let query='customers?select=id,full_name,phone,status,last_contact&limit='+actualLimit;
   if(filter.status)query+='&status=eq.'+encodeURIComponent(filter.status);
-  query+='&order=created_at.desc';
+  // last_contact NULL olan (hiç aranmamış) veya 1 saatten eski arananlar
+  query+='&or=(last_contact.is.null,last_contact.lt.'+encodeURIComponent(oneHourAgo)+')';
+  // Önce NULL olanlar (hiç aranmamış), sonra en eski aranmış
+  query+='&order=last_contact.asc.nullsfirst';
   const customers=await sb('GET',query);
   if(!Array.isArray(customers)||!customers.length)return {error:'no_customers_found'};
   const results=[];
@@ -308,7 +313,7 @@ const server=http.createServer((rq,res)=>{
           const parsedArgs=typeof args==='string'?JSON.parse(args):args;
           const leadCode=await handleSaveLead(parsedArgs,callId);
           res.writeHead(200);
-          res.end(JSON.stringify({results:[{toolCallId:id,result:'Kayıt tamamlandı. Referans kodunuz: '+leadCode}]}));
+          res.end(JSON.stringify({results:[{toolCallId:id,result:'KayÄ±t tamamlandÄ±. Referans kodunuz: '+leadCode}]}));
           return;
         }
         
@@ -320,11 +325,11 @@ const server=http.createServer((rq,res)=>{
           const parsedArgs=typeof args==='string'?JSON.parse(args):args;
           await handleRejection(parsedArgs,callId);
           res.writeHead(200);
-          res.end(JSON.stringify({results:[{toolCallId:id,result:'Red loglandı'}]}));
+          res.end(JSON.stringify({results:[{toolCallId:id,result:'Red loglandÄ±'}]}));
           return;
         }
         
-        // === NEW: VAPI tool endpoint - canlı fiyatlar ===
+        // === NEW: VAPI tool endpoint - canlÄ± fiyatlar ===
         if(rq.url==='/get-live-prices'){
           const tool=data.message?.toolCallList?.[0]||data.message?.functionCall;
           const id=tool?.id||'x';
