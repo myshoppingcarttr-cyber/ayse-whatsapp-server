@@ -26,7 +26,7 @@ function buildEmailHtml(lead){
   const MODEL={demo_only:'1 ay ücretsiz demo deneme',demo_plus_investment:'Demo + 3000 USD yatırım + %20 bonus',undecided:'Kararsız (uzman yönlendirecek)'};
   const INT={high:'🟢 YÜKSEK',medium:'🟡 ORTA',low:'🔴 DÜŞÜK'};
   const CHAN={phone:'📞 Telefon',whatsapp:'💬 WhatsApp',email:'📧 Email'};
-  const crmLink=CRM_BASE+'&lead='+(lead.lead_id||'');
+  const crmLink=CRM_BASE+'&customer='+(lead.customer_id||'');
   return '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f7f5f0">'+
     '<div style="background:#181418;padding:28px 24px;border-bottom:4px solid #C9A96E">'+
       '<div style="color:#C9A96E;font-size:22px;font-weight:900;letter-spacing:2px">GLOBAL EXBİNA</div>'+
@@ -47,7 +47,7 @@ function buildEmailHtml(lead){
       '<div style="margin-top:28px;text-align:center"><a href="'+crmLink+'" style="display:inline-block;background:#C9A96E;color:#181418;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;letter-spacing:1px">CRM\'DE MÜŞTERİYİ AÇ →</a></div>'+
       '<div style="margin-top:20px;padding:12px;background:#f7f5f0;border-radius:6px;text-align:center;font-size:12px;color:#888">Müşteri aradığında referans kodunu isteyebilir: <strong style="color:#181418">'+(lead.lead_code||'—')+'</strong></div>'+
     '</div>'+
-    '<div style="padding:16px;text-align:center;color:#888;font-size:11px;background:#f0ede6">Global Exbina · Ayşe AI · Lead ID: '+(lead.lead_id||'—')+'</div>'+
+    '<div style="padding:16px;text-align:center;color:#888;font-size:11px;background:#f0ede6">Global Exbina · Ayşe AI · Customer ID: '+(lead.customer_id||'—')+'</div>'+
   '</div>';
 }
 
@@ -55,13 +55,14 @@ async function handleSaveLead(args,callId){
   const lead_code=genLeadCode();
   const full_name=(args.full_name||'').trim();
   const phone=normPhone(args.phone);
-  
-  // Notes'a tüm detay
-  const MODELS={demo_only:'Sadece 1 ay demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
+  const MODELS={demo_only:'1 ay demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
   const INT={high:'Yüksek',medium:'Orta',low:'Düşük'};
   const CHAN={phone:'Telefon',whatsapp:'WhatsApp',email:'Email'};
+  
+  // Notes'un İLK satırı LEAD-XXXX kodu (CRM'de kolayca görmek için)
   const notesText=[
-    '🤖 Ayşe AI araması ('+lead_code+')',
+    '['+lead_code+']',
+    '🤖 Ayşe AI araması ('+new Date().toLocaleString('tr-TR')+')',
     '📅 Randevu: '+(args.preferred_datetime||'-'),
     '🎯 Model: '+(MODELS[args.selected_model]||args.selected_model||'-'),
     '📞 Kanal: '+(CHAN[args.preferred_channel]||'Telefon'),
@@ -70,43 +71,44 @@ async function handleSaveLead(args,callId){
     args.notes?'📝 '+args.notes:''
   ].filter(Boolean).join('\n');
   
-  // Tags array'ine lead_code ekle
-  const tags=[lead_code,'ayse_ai_call',args.selected_model||'undecided'];
+  let customer_id=null;
   
-  // Mevcut lead kontrolü (phone match)
-  let lead_id=null;
+  // Mevcut customer var mı (phone match)
   if(phone){
-    const existing=await sb('GET','leads?phone=eq.'+encodeURIComponent(phone)+'&select=id,notes,tags').catch(()=>null);
+    const existing=await sb('GET','customers?phone=eq.'+encodeURIComponent(phone)+'&select=id,notes').catch(()=>null);
     if(Array.isArray(existing)&&existing[0]){
-      lead_id=existing[0].id;
-      const mergedNotes=(existing[0].notes||'')+'\n\n--- '+new Date().toISOString()+' ---\n'+notesText;
-      const mergedTags=Array.from(new Set([...(existing[0].tags||[]),...tags]));
-      await sb('PATCH','leads?id=eq.'+lead_id,{
+      customer_id=existing[0].id;
+      const mergedNotes='['+lead_code+']\n'+notesText+(existing[0].notes?'\n\n--- Önceki ---\n'+existing[0].notes:'');
+      await sb('PATCH','customers?id=eq.'+customer_id,{
         notes:mergedNotes,
-        tags:mergedTags,
         status:'hot',
         score:95,
+        interest:MODELS[args.selected_model]||args.selected_model,
         updated_at:new Date().toISOString()
       }).catch(e=>console.error('update err',e));
     }
   }
   
-  if(!lead_id){
-    const newLead={
-      full_name,phone:phone||'unknown_'+Date.now(),
-      language:'tr',country:'UK',status:'hot',score:95,
-      source:'ayse_ai_call',notes:notesText,tags,
-      interests:[args.selected_model||'undecided']
+  if(!customer_id){
+    const newCustomer={
+      full_name,
+      phone:phone||'unknown_'+Date.now(),
+      country:'UK',
+      status:'hot',
+      score:95,
+      source:'ayse_ai_call',
+      interest:MODELS[args.selected_model]||args.selected_model||null,
+      notes:notesText
     };
-    const ins=await sb('POST','leads',newLead).catch(e=>{console.error('insert err',e);return null;});
-    if(Array.isArray(ins)&&ins[0])lead_id=ins[0].id;
+    const ins=await sb('POST','customers',newCustomer).catch(e=>{console.error('insert err',e);return null;});
+    if(Array.isArray(ins)&&ins[0])customer_id=ins[0].id;
   }
   
   // Call log
   if(callId){
     await sb('POST','calls',{
       vapi_call_id:callId,
-      customer_id:lead_id,
+      customer_id:customer_id,
       call_type:'outbound',
       status:'completed',
       outcome:'appointment_booked',
@@ -122,7 +124,7 @@ async function handleSaveLead(args,callId){
   
   // Email uzmana
   const emailData={
-    lead_code,lead_id,full_name,phone,
+    lead_code,customer_id,full_name,phone,
     preferred_datetime:args.preferred_datetime,
     preferred_channel:args.preferred_channel,
     selected_model:args.selected_model,
@@ -132,8 +134,8 @@ async function handleSaveLead(args,callId){
   };
   sendEmail(EXPERT_EMAIL,'🔥 ['+lead_code+'] Yeni sıcak lead: '+full_name,buildEmailHtml(emailData)).catch(e=>console.error('email err',e));
   
-  // WhatsApp admin bildirimi
-  wa(ADMIN_WA,'🔥 AYŞE SICAK LEAD!\n\n'+lead_code+'\n'+full_name+'\n'+(phone||'-')+'\n\nRandevu: '+(args.preferred_datetime||'-')+'\nModel: '+(MODELS[args.selected_model]||'-')+'\n\nCRM: '+CRM_BASE+'&lead='+(lead_id||'')).catch(()=>{});
+  // Admin WhatsApp bildirimi
+  wa(ADMIN_WA,'🔥 AYŞE SICAK LEAD!\n\n'+lead_code+'\n'+full_name+'\n'+(phone||'-')+'\n\nRandevu: '+(args.preferred_datetime||'-')+'\nModel: '+(MODELS[args.selected_model]||'-')+'\n\nCRM: '+CRM_BASE+'&customer='+(customer_id||'')).catch(()=>{});
   
   return lead_code;
 }
@@ -156,10 +158,8 @@ async function handleRejection(args,callId){
 
 async function syncCall(vapiCallId){
   try{
-    console.log('Sync call:',vapiCallId);
     const call=await vapi('GET','call/'+vapiCallId);
     if(!call||!call.id)return;
-    const sd=call.analysis?.structuredData||{};
     const dur=call.startedAt&&call.endedAt?Math.round((new Date(call.endedAt)-new Date(call.startedAt))/1000):0;
     await sb('PATCH','calls?vapi_call_id=eq.'+vapiCallId,{
       duration_seconds:dur,
@@ -174,7 +174,7 @@ const server=http.createServer((req,res)=>{
   res.setHeader('Access-Control-Allow-Origin','*');
   res.setHeader('Content-Type','application/json');
   if(req.method==='OPTIONS'){res.writeHead(200);res.end();return;}
-  if(req.method==='GET'){res.writeHead(200);res.end(JSON.stringify({status:'Ayse Server v5.0 aktif',endpoints:['/save-lead','/log-rejection','/vapi-webhook','/send-whatsapp','/twilio-webhook','/sync-call'],time:new Date().toISOString()}));return;}
+  if(req.method==='GET'){res.writeHead(200);res.end(JSON.stringify({status:'Ayse Server v5.1 aktif - customers table',endpoints:['/save-lead','/log-rejection','/vapi-webhook','/send-whatsapp','/twilio-webhook','/sync-call'],expert_email:EXPERT_EMAIL,has_resend:!!RESEND_KEY,time:new Date().toISOString()}));return;}
   if(req.method==='POST'){
     let body='';
     req.on('data',c=>body+=c);
@@ -182,7 +182,6 @@ const server=http.createServer((req,res)=>{
       try{
         const data=JSON.parse(body||'{}');
         
-        // VAPI function call: save_lead
         if(req.url==='/save-lead'){
           const tool=data.message?.toolCallList?.[0]||data.message?.functionCall;
           const args=tool?.function?.arguments||tool?.arguments||tool?.parameters||data;
@@ -195,7 +194,6 @@ const server=http.createServer((req,res)=>{
           return;
         }
         
-        // VAPI function call: log_rejection
         if(req.url==='/log-rejection'){
           const tool=data.message?.toolCallList?.[0]||data.message?.functionCall;
           const args=tool?.function?.arguments||tool?.arguments||tool?.parameters||data;
@@ -208,7 +206,6 @@ const server=http.createServer((req,res)=>{
           return;
         }
         
-        // Vapi end-of-call
         if(req.url==='/vapi-webhook'){
           const type=data.message?.type||data.type;
           const callId=data.message?.call?.id||data.call?.id||data.callId;
@@ -254,4 +251,4 @@ const server=http.createServer((req,res)=>{
   res.writeHead(404);res.end('{}');
 });
 const PORT=process.env.PORT||3000;
-server.listen(PORT,()=>console.log('Ayse Server v5.0 port '+PORT));
+server.listen(PORT,()=>console.log('Ayse Server v5.1 port '+PORT));
