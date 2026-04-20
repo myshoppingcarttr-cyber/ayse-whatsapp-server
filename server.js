@@ -2,6 +2,8 @@ const http=require('http'),https=require('https');
 const nodemailer=require('nodemailer');
 
 const VK=process.env.VAPI_KEY||'74b7b21d-f286-4a56-b1ac-2bf37a91d088';
+const ASSISTANT_ID='133aa70c-db4b-4155-be6b-220450c0b21a';
+const PHONE_NUMBER_ID='97bf7ebd-d04c-4faa-b897-5ade6c02ea3a';
 const SB='https://muwynsxukmxjquoqcbac.supabase.co';
 const SK=process.env.SB_KEY||'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11d3luc3h1a214anF1b3FjYmFjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjExMzQwMCwiZXhwIjoyMDkxNjg5NDAwfQ.33AsVo1mIeNHznTKnr6IUjVTLP_puNeNFJMS8-GsO30';
 const TWILIO_SID=process.env.TWILIO_SID,TWILIO_TOKEN=process.env.TWILIO_TOKEN;
@@ -11,28 +13,20 @@ const EXPERT_EMAIL=process.env.EXPERT_EMAIL||'yigittatarli23@gmail.com';
 const FROM_WA='whatsapp:+14155238886',ADMIN_WA='whatsapp:+38267670828';
 const CRM_BASE='https://myshoppingcarttr-cyber.github.io/tradebot-crm/?v=71';
 
-// STAFF EMAILS - personel mail eşleştirmesi (env'de override edilebilir)
-// Format: "id1:email1,id2:email2"
 const STAFF_EMAIL_MAP=(process.env.STAFF_EMAILS||'').split(',').reduce((acc,p)=>{
-  const[id,em]=p.split(':');
-  if(id&&em)acc[id.trim()]=em.trim();
-  return acc;
+  const[id,em]=p.split(':');if(id&&em)acc[id.trim()]=em.trim();return acc;
 },{});
 
-// Gmail SMTP transporter
 let gmailTransporter=null;
 if(GMAIL_USER&&GMAIL_APP_PASSWORD){
   gmailTransporter=nodemailer.createTransport({
     service:'gmail',
     auth:{user:GMAIL_USER,pass:GMAIL_APP_PASSWORD.replace(/\s/g,'')}
   });
-  // Test connection on startup
-  gmailTransporter.verify((err,success)=>{
+  gmailTransporter.verify((err)=>{
     if(err)console.error('Gmail SMTP ERROR:',err.message);
     else console.log('Gmail SMTP ready - sending as '+GMAIL_USER);
   });
-}else{
-  console.log('Gmail not configured - set GMAIL_USER and GMAIL_APP_PASSWORD env vars');
 }
 
 function req(opts,body){return new Promise((res,rej)=>{const r=https.request(opts,x=>{let d='';x.on('data',c=>d+=c);x.on('end',()=>{try{res(JSON.parse(d))}catch(e){res(d)}})});r.on('error',rej);if(body)r.write(typeof body==='string'?body:JSON.stringify(body));r.end()});}
@@ -41,27 +35,33 @@ function vapi(method,path,body){const p=body?JSON.stringify(body):null;return re
 function wa(to,text){if(!TWILIO_SID)return Promise.resolve();const auth=Buffer.from(TWILIO_SID+':'+TWILIO_TOKEN).toString('base64');const pd='To='+encodeURIComponent(to)+'&From='+encodeURIComponent(FROM_WA)+'&Body='+encodeURIComponent(text);return req({hostname:'api.twilio.com',path:'/2010-04-01/Accounts/'+TWILIO_SID+'/Messages.json',method:'POST',headers:{'Authorization':'Basic '+auth,'Content-Type':'application/x-www-form-urlencoded','Content-Length':Buffer.byteLength(pd)}},pd);}
 
 async function sendEmail(to,subject,html){
-  if(!gmailTransporter){console.log('[Email skip - no Gmail]',subject);return null;}
+  if(!gmailTransporter){return null;}
   try{
     const info=await gmailTransporter.sendMail({
       from:'"Global Exbina - Ayşe AI" <'+GMAIL_USER+'>',
-      to:to,
-      subject:subject,
-      html:html
+      to:to,subject:subject,html:html
     });
-    console.log('Email sent to',to,'msgId:',info.messageId);
+    console.log('Email sent to',to);
     return info;
-  }catch(e){
-    console.error('Gmail send error:',e.message);
-    return null;
-  }
+  }catch(e){console.error('Gmail error:',e.message);return null;}
 }
 
 function genLeadCode(){return 'LEAD-'+Math.floor(1000+Math.random()*9000);}
-function normPhone(raw){if(!raw)return'';let p=(''+raw).replace(/[^\d+]/g,'');if(p.startsWith('00'))p='+'+p.slice(2);if(!p.startsWith('+')){if(p.startsWith('44'))p='+'+p;else if(p.startsWith('07'))p='+44'+p.slice(1);else p='+'+p;}return p;}
+function normPhone(raw){
+  if(!raw)return'';
+  let p=(''+raw).replace(/[^\d+]/g,'');
+  if(p.startsWith('00'))p='+'+p.slice(2);
+  if(!p.startsWith('+')){
+    if(p.startsWith('90')&&p.length>=12)p='+'+p;
+    else if(p.startsWith('0')&&p.length===11)p='+9'+p;
+    else if(p.length===10)p='+90'+p;
+    else p='+'+p;
+  }
+  return p;
+}
 
 function buildEmailHtml(lead,forStaff=false){
-  const MODEL={demo_only:'1 ay ücretsiz demo deneme',demo_plus_investment:'Demo + 3000 USD yatırım + %20 bonus',undecided:'Kararsız (uzman yönlendirecek)'};
+  const MODEL={demo_only:'1 ay ücretsiz demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
   const INT={high:'🟢 YÜKSEK',medium:'🟡 ORTA',low:'🔴 DÜŞÜK'};
   const CHAN={phone:'📞 Telefon',whatsapp:'💬 WhatsApp',email:'📧 Email'};
   const crmLink=CRM_BASE+'&customer='+(lead.customer_id||'');
@@ -74,37 +74,28 @@ function buildEmailHtml(lead,forStaff=false){
     '<div style="background:#fff;padding:24px">'+
       '<div style="background:#C9A96E;color:#181418;padding:8px 16px;border-radius:6px;display:inline-block;font-weight:700;font-size:14px;letter-spacing:1px">'+(lead.lead_code||'—')+'</div>'+
       '<h2 style="color:#181418;margin:16px 0 4px;font-size:22px">'+(lead.full_name||'—')+'</h2>'+
-      '<div style="color:#888;font-size:13px;margin-bottom:20px">'+(INT[lead.interest_level]||lead.interest_level||'')+' ilgi seviyesi</div>'+
+      '<div style="color:#888;font-size:13px;margin-bottom:20px">'+(INT[lead.interest_level]||'')+' ilgi seviyesi</div>'+
       '<table style="width:100%;border-collapse:collapse;margin:16px 0">'+
         '<tr><td style="padding:10px 0;color:#666;width:150px;border-bottom:1px solid #eee">Telefon</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee"><a href="tel:'+(lead.phone||'')+'" style="color:#C9A96E;text-decoration:none">'+(lead.phone||'—')+'</a></td></tr>'+
-        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Randevu Zamanı</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(lead.preferred_datetime||'—')+'</td></tr>'+
-        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">İletişim Kanalı</td><td style="padding:10px 0;color:#181418;border-bottom:1px solid #eee">'+(CHAN[lead.preferred_channel]||'Telefon')+'</td></tr>'+
-        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Tercih Edilen Model</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(MODEL[lead.selected_model]||lead.selected_model||'—')+'</td></tr>'+
+        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Randevu</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(lead.preferred_datetime||'—')+'</td></tr>'+
+        '<tr><td style="padding:10px 0;color:#666;border-bottom:1px solid #eee">Model</td><td style="padding:10px 0;color:#181418;font-weight:500;border-bottom:1px solid #eee">'+(MODEL[lead.selected_model]||lead.selected_model||'—')+'</td></tr>'+
       '</table>'+
-      (lead.objection?'<div style="background:#fff5f5;padding:14px 16px;border-left:4px solid #F46A76;border-radius:4px;margin:16px 0"><div style="color:#F46A76;font-size:11px;letter-spacing:2px;font-weight:600;margin-bottom:6px">MÜŞTERİ İTİRAZI</div><div style="color:#333;font-size:14px">'+lead.objection+'</div></div>':'')+
-      (lead.notes?'<div style="background:#faf8f3;padding:14px 16px;border-left:4px solid #C9A96E;border-radius:4px;margin:16px 0"><div style="color:#7B6EA8;font-size:11px;letter-spacing:2px;font-weight:600;margin-bottom:6px">NOTLAR</div><div style="color:#333;font-size:14px;white-space:pre-wrap">'+lead.notes+'</div></div>':'')+
-      '<div style="margin-top:28px;text-align:center"><a href="'+crmLink+'" style="display:inline-block;background:#C9A96E;color:#181418;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px;letter-spacing:1px">CRM\'DE MÜŞTERİYİ AÇ →</a></div>'+
-      '<div style="margin-top:20px;padding:12px;background:#f7f5f0;border-radius:6px;text-align:center;font-size:12px;color:#888">Müşteri aradığında referans kodunu isteyebilir: <strong style="color:#181418">'+(lead.lead_code||'—')+'</strong></div>'+
-    '</div>'+
-    '<div style="padding:16px;text-align:center;color:#888;font-size:11px;background:#f0ede6">Global Exbina · Ayşe AI · Customer ID: '+(lead.customer_id||'—')+'</div>'+
-  '</div>';
+      (lead.objection?'<div style="background:#fff5f5;padding:14px 16px;border-left:4px solid #F46A76;border-radius:4px;margin:16px 0"><div style="color:#F46A76;font-size:11px;letter-spacing:2px;font-weight:600;margin-bottom:6px">İTİRAZ</div><div style="color:#333;font-size:14px">'+lead.objection+'</div></div>':'')+
+      '<div style="margin-top:28px;text-align:center"><a href="'+crmLink+'" style="display:inline-block;background:#C9A96E;color:#181418;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:700;font-size:15px">CRM\'DE AÇ →</a></div>'+
+    '</div></div>';
 }
 
-// Round-robin agent atama - sıradaki agent'ı seç
 async function pickNextAgent(){
   try{
     const agents=await sb('GET','users?role=eq.agent&is_active=eq.true&select=id,full_name');
     if(!Array.isArray(agents)||!agents.length)return null;
-    // Son 10 customers'a bak, en az atanan agent'ı seç
     const recent=await sb('GET','customers?source=eq.ayse_ai_call&order=created_at.desc&limit=20&select=assigned_to');
-    const counts={};
-    agents.forEach(a=>counts[a.id]=0);
+    const counts={};agents.forEach(a=>counts[a.id]=0);
     if(Array.isArray(recent))recent.forEach(c=>{if(c.assigned_to&&counts[c.assigned_to]!==undefined)counts[c.assigned_to]++;});
-    // En az atananı bul
     let minCount=Infinity,selected=agents[0];
     agents.forEach(a=>{if(counts[a.id]<minCount){minCount=counts[a.id];selected=a;}});
     return selected;
-  }catch(e){console.error('pickNextAgent:',e.message);return null;}
+  }catch(e){return null;}
 }
 
 async function handleSaveLead(args,callId){
@@ -114,119 +105,50 @@ async function handleSaveLead(args,callId){
   const MODELS={demo_only:'1 ay demo',demo_plus_investment:'Demo + 3000 USD + %20 bonus',undecided:'Kararsız'};
   const INT={high:'Yüksek',medium:'Orta',low:'Düşük'};
   const CHAN={phone:'Telefon',whatsapp:'WhatsApp',email:'Email'};
-  
-  const notesText=[
-    '['+lead_code+']',
-    '🤖 Ayşe AI araması ('+new Date().toLocaleString('tr-TR')+')',
-    '📅 Randevu: '+(args.preferred_datetime||'-'),
-    '🎯 Model: '+(MODELS[args.selected_model]||args.selected_model||'-'),
-    '📞 Kanal: '+(CHAN[args.preferred_channel]||'Telefon'),
-    '🔥 İlgi: '+(INT[args.interest_level]||'-'),
-    args.objection?'⚠️ İtiraz: '+args.objection:'',
-    args.notes?'📝 '+args.notes:''
-  ].filter(Boolean).join('\n');
-  
-  let customer_id=null;
-  let assignedAgent=null;
-  
+  const notesText=['['+lead_code+']','🤖 Ayşe AI araması ('+new Date().toLocaleString('tr-TR')+')','📅 Randevu: '+(args.preferred_datetime||'-'),'🎯 Model: '+(MODELS[args.selected_model]||'-'),'📞 Kanal: '+(CHAN[args.preferred_channel]||'Telefon'),'🔥 İlgi: '+(INT[args.interest_level]||'-'),args.objection?'⚠️ İtiraz: '+args.objection:'',args.notes?'📝 '+args.notes:''].filter(Boolean).join('\n');
+  let customer_id=null,assignedAgent=null;
   if(phone){
     const existing=await sb('GET','customers?phone=eq.'+encodeURIComponent(phone)+'&select=id,notes,assigned_to').catch(()=>null);
     if(Array.isArray(existing)&&existing[0]){
       customer_id=existing[0].id;
       const mergedNotes='['+lead_code+']\n'+notesText+(existing[0].notes?'\n\n--- Önceki ---\n'+existing[0].notes:'');
-      // Mevcut assigned_to'yu koru veya yeni ata
       if(existing[0].assigned_to){
         const agRow=await sb('GET','users?id=eq.'+existing[0].assigned_to+'&select=id,full_name').catch(()=>null);
         if(Array.isArray(agRow)&&agRow[0])assignedAgent=agRow[0];
-      }else{
-        assignedAgent=await pickNextAgent();
-      }
-      await sb('PATCH','customers?id=eq.'+customer_id,{
-        notes:mergedNotes,
-        status:'hot',
-        score:95,
-        interest:MODELS[args.selected_model]||args.selected_model,
-        assigned_to:assignedAgent?.id||existing[0].assigned_to,
-        updated_at:new Date().toISOString()
-      }).catch(e=>console.error('update err',e));
+      }else assignedAgent=await pickNextAgent();
+      await sb('PATCH','customers?id=eq.'+customer_id,{notes:mergedNotes,status:'hot',score:95,interest:MODELS[args.selected_model]||args.selected_model,assigned_to:assignedAgent?.id||existing[0].assigned_to,updated_at:new Date().toISOString()}).catch(()=>{});
     }
   }
-  
   if(!customer_id){
-    // Yeni customer - round-robin agent ata
     assignedAgent=await pickNextAgent();
-    const newCustomer={
-      full_name,
-      phone:phone||'unknown_'+Date.now(),
-      country:'UK',
-      status:'hot',
-      score:95,
-      source:'ayse_ai_call',
-      interest:MODELS[args.selected_model]||args.selected_model||null,
-      notes:notesText,
-      assigned_to:assignedAgent?.id||null
-    };
-    const ins=await sb('POST','customers',newCustomer).catch(e=>{console.error('insert err',e);return null;});
+    const ins=await sb('POST','customers',{full_name,phone:phone||'unknown_'+Date.now(),country:'TR',status:'hot',score:95,source:'ayse_ai_call',interest:MODELS[args.selected_model]||null,notes:notesText,assigned_to:assignedAgent?.id||null}).catch(()=>null);
     if(Array.isArray(ins)&&ins[0])customer_id=ins[0].id;
   }
-  
-  // Call log
   if(callId){
-    await sb('POST','calls',{
-      vapi_call_id:callId,
-      customer_id:customer_id,
-      agent_id:assignedAgent?.id||null,
-      call_type:'outbound',
-      status:'completed',
-      outcome:'appointment_booked',
-      randevu_alindi:true,
-      skor:args.interest_level==='high'?90:args.interest_level==='medium'?60:30,
-      ilgi_seviyesi:args.interest_level,
-      itiraz:args.objection||null,
-      satis_durumu:'appointment_requested',
-      etiket:lead_code,
-      notes:notesText
-    }).catch(e=>console.error('call log err',e));
+    await sb('POST','calls',{vapi_call_id:callId,customer_id,agent_id:assignedAgent?.id||null,call_type:'outbound',status:'completed',outcome:'appointment_booked',randevu_alindi:true,skor:args.interest_level==='high'?90:args.interest_level==='medium'?60:30,ilgi_seviyesi:args.interest_level,itiraz:args.objection||null,satis_durumu:'appointment_requested',etiket:lead_code,notes:notesText}).catch(()=>{});
   }
-  
-  const emailData={
-    lead_code,customer_id,full_name,phone,
-    preferred_datetime:args.preferred_datetime,
-    preferred_channel:args.preferred_channel,
-    selected_model:args.selected_model,
-    interest_level:args.interest_level,
-    objection:args.objection,
-    notes:args.notes
-  };
-  
-  // 1. Admin'e mail (genel bildirim)
-  sendEmail(EXPERT_EMAIL,'🔥 ['+lead_code+'] Yeni sıcak lead: '+full_name,buildEmailHtml(emailData,false)).catch(e=>console.error(e));
-  
-  // 2. Atanan personele mail (varsa)
+  const emailData={lead_code,customer_id,full_name,phone,preferred_datetime:args.preferred_datetime,preferred_channel:args.preferred_channel,selected_model:args.selected_model,interest_level:args.interest_level,objection:args.objection,notes:args.notes};
+  sendEmail(EXPERT_EMAIL,'🔥 ['+lead_code+'] Yeni sıcak lead: '+full_name,buildEmailHtml(emailData)).catch(()=>{});
   if(assignedAgent&&STAFF_EMAIL_MAP[assignedAgent.id]){
-    const staffEmail=STAFF_EMAIL_MAP[assignedAgent.id];
-    sendEmail(staffEmail,'🔥 ['+lead_code+'] Size atandı: '+full_name,buildEmailHtml(emailData,true)).catch(e=>console.error(e));
-    console.log('Staff notified:',assignedAgent.full_name,staffEmail);
+    sendEmail(STAFF_EMAIL_MAP[assignedAgent.id],'🔥 ['+lead_code+'] Size atandı: '+full_name,buildEmailHtml(emailData,true)).catch(()=>{});
   }
-  
-  // 3. WhatsApp admin
-  wa(ADMIN_WA,'🔥 AYŞE SICAK LEAD!\n\n'+lead_code+'\n'+full_name+'\n'+(phone||'-')+'\n\nRandevu: '+(args.preferred_datetime||'-')+'\nModel: '+(MODELS[args.selected_model]||'-')+'\nAtanan: '+(assignedAgent?.full_name||'atanamadı')+'\n\nCRM: '+CRM_BASE+'&customer='+(customer_id||'')).catch(()=>{});
-  
+  wa(ADMIN_WA,'🔥 LEAD '+lead_code+' '+full_name+' '+(phone||'-')+' '+(MODELS[args.selected_model]||'-')).catch(()=>{});
   return lead_code;
 }
 
 async function handleRejection(args,callId){
   if(callId){
-    await sb('POST','calls',{
-      vapi_call_id:callId,
-      call_type:'outbound',
-      status:'completed',
-      outcome:'rejected',
-      randevu_alindi:false,
-      satis_durumu:'lost',
-      itiraz:args.reason||'unspecified',
-      notes:args.notes||''
-    }).catch(e=>console.error('rej log err',e));
+    await sb('POST','calls',{vapi_call_id:callId,call_type:'outbound',status:'completed',outcome:'rejected',randevu_alindi:false,satis_durumu:'lost',itiraz:args.reason||'unspecified',notes:args.notes||''}).catch(()=>{});
+  }
+  // Customer status'u ilgilenmedi'ye çek
+  if(callId){
+    try{
+      const call=await vapi('GET','call/'+callId);
+      const phone=call.customer?.number;
+      if(phone){
+        await sb('PATCH','customers?phone=eq.'+encodeURIComponent(phone),{status:args.reason==='do_not_call'?'blacklist':'ilgilenmedi',updated_at:new Date().toISOString()}).catch(()=>{});
+      }
+    }catch(e){}
   }
   return 'logged';
 }
@@ -236,20 +158,115 @@ async function syncCall(vapiCallId){
     const call=await vapi('GET','call/'+vapiCallId);
     if(!call||!call.id)return;
     const dur=call.startedAt&&call.endedAt?Math.round((new Date(call.endedAt)-new Date(call.startedAt))/1000):0;
-    await sb('PATCH','calls?vapi_call_id=eq.'+vapiCallId,{
-      duration_seconds:dur,
-      summary:call.analysis?.summary||'',
-      transcript:call.transcript||'',
-      recording_url:call.recordingUrl||null
+    await sb('PATCH','calls?vapi_call_id=eq.'+vapiCallId,{duration_seconds:dur,summary:call.analysis?.summary||'',transcript:call.transcript||'',recording_url:call.recordingUrl||null}).catch(()=>{});
+  }catch(e){}
+}
+
+// === NEW: Single outbound call ===
+async function makeCall(customer_id,phone_override){
+  let customer=null;
+  if(customer_id){
+    const cr=await sb('GET','customers?id=eq.'+customer_id+'&select=*');
+    if(Array.isArray(cr)&&cr[0])customer=cr[0];
+  }
+  const phone=normPhone(phone_override||customer?.phone);
+  if(!phone||phone.length<10)return {error:'invalid_phone',phone};
+  
+  const callBody={
+    assistantId:ASSISTANT_ID,
+    phoneNumberId:PHONE_NUMBER_ID,
+    customer:{number:phone,name:customer?.full_name||'Bilinmeyen'}
+  };
+  
+  const result=await vapi('POST','call',callBody);
+  
+  if(result?.id){
+    // calls tablosuna logla
+    await sb('POST','calls',{
+      vapi_call_id:result.id,
+      customer_id:customer?.id||null,
+      call_type:'outbound',
+      status:'initiated',
+      notes:'🤖 Ayşe AI outbound başlatıldı - '+new Date().toLocaleString('tr-TR')
     }).catch(()=>{});
-  }catch(e){console.error('syncCall error:',e.message);}
+    // customer status'u 'aranıyor' yap
+    if(customer?.id){
+      await sb('PATCH','customers?id=eq.'+customer.id,{status:'aranıyor',last_contact:new Date().toISOString()}).catch(()=>{});
+    }
+    return {ok:true,call_id:result.id,phone,customer_name:customer?.full_name};
+  }
+  return {error:'vapi_failed',detail:result};
+}
+
+// === NEW: Bulk outbound calls ===
+async function bulkCalls(params){
+  const {filter={},limit=10,concurrent=2,delay_ms=3000}=params;
+  const MAX=100;
+  const actualLimit=Math.min(limit,MAX);
+  
+  // Supabase query oluştur
+  let query='customers?select=id,full_name,phone,status&limit='+actualLimit;
+  if(filter.status)query+='&status=eq.'+encodeURIComponent(filter.status);
+  if(filter.country)query+='&country=eq.'+encodeURIComponent(filter.country);
+  query+='&order=created_at.desc';
+  
+  const customers=await sb('GET',query);
+  if(!Array.isArray(customers)||!customers.length)return {error:'no_customers_found'};
+  
+  const results=[];
+  const queue=[...customers];
+  const active=new Set();
+  
+  async function processOne(c){
+    try{
+      const r=await makeCall(c.id);
+      results.push({customer_id:c.id,name:c.full_name,phone:c.phone,result:r});
+    }catch(e){
+      results.push({customer_id:c.id,error:e.message});
+    }
+    active.delete(c.id);
+  }
+  
+  while(queue.length>0||active.size>0){
+    while(active.size<concurrent&&queue.length>0){
+      const c=queue.shift();
+      active.add(c.id);
+      processOne(c);
+    }
+    await new Promise(r=>setTimeout(r,delay_ms));
+  }
+  
+  // Tüm aramalar başlatıldıktan sonra biraz bekle ki results dolsun
+  await new Promise(r=>setTimeout(r,2000));
+  
+  return {total_queued:customers.length,results};
 }
 
 const server=http.createServer((req,res)=>{
   res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');
   res.setHeader('Content-Type','application/json');
   if(req.method==='OPTIONS'){res.writeHead(200);res.end();return;}
-  if(req.method==='GET'){res.writeHead(200);res.end(JSON.stringify({status:'Ayse Server v5.2 - Gmail SMTP',endpoints:['/save-lead','/log-rejection','/vapi-webhook','/send-whatsapp','/twilio-webhook','/sync-call','/send-email'],gmail_configured:!!gmailTransporter,staff_count:Object.keys(STAFF_EMAIL_MAP).length,time:new Date().toISOString()}));return;}
+  if(req.method==='GET'){
+    if(req.url.startsWith('/call-status/')){
+      const callId=req.url.split('/call-status/')[1];
+      vapi('GET','call/'+callId).then(c=>{
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          status:c.status,endedReason:c.endedReason,
+          duration:c.startedAt&&c.endedAt?Math.round((new Date(c.endedAt)-new Date(c.startedAt))/1000):null,
+          msgCount:(c.messages||[]).length,
+          transcript:c.transcript?.substring(0,500),
+          summary:c.analysis?.summary
+        }));
+      }).catch(()=>{res.writeHead(500);res.end('{}');});
+      return;
+    }
+    res.writeHead(200);
+    res.end(JSON.stringify({status:'Ayse Server v5.3 - Outbound Calls',endpoints:['/save-lead','/log-rejection','/vapi-webhook','/send-whatsapp','/send-email','/make-call','/bulk-call','/call-status/:id','/sync-call'],gmail_configured:!!gmailTransporter,phone_number:'+902128220416',assistant_id:ASSISTANT_ID,time:new Date().toISOString()}));
+    return;
+  }
   if(req.method==='POST'){
     let body='';
     req.on('data',c=>body+=c);
@@ -259,19 +276,19 @@ const server=http.createServer((req,res)=>{
         
         if(req.url==='/save-lead'){
           const tool=data.message?.toolCallList?.[0]||data.message?.functionCall;
-          const args=tool?.function?.arguments||tool?.arguments||tool?.parameters||data;
+          const args=tool?.function?.arguments||tool?.arguments||data;
           const id=tool?.id||'x';
           const callId=data.message?.call?.id||data.call?.id;
           const parsedArgs=typeof args==='string'?JSON.parse(args):args;
           const leadCode=await handleSaveLead(parsedArgs,callId);
           res.writeHead(200);
-          res.end(JSON.stringify({results:[{toolCallId:id,result:'Kayıt tamamlandı. Müşteriye söyleyeceğiniz referans kodu: '+leadCode}]}));
+          res.end(JSON.stringify({results:[{toolCallId:id,result:'Kayıt tamamlandı. Referans kodunuz: '+leadCode}]}));
           return;
         }
         
         if(req.url==='/log-rejection'){
           const tool=data.message?.toolCallList?.[0]||data.message?.functionCall;
-          const args=tool?.function?.arguments||tool?.arguments||tool?.parameters||data;
+          const args=tool?.function?.arguments||tool?.arguments||data;
           const id=tool?.id||'x';
           const callId=data.message?.call?.id||data.call?.id;
           const parsedArgs=typeof args==='string'?JSON.parse(args):args;
@@ -281,7 +298,6 @@ const server=http.createServer((req,res)=>{
           return;
         }
         
-        // Manuel mail gönderme endpoint (CRM'den kullanılabilir)
         if(req.url==='/send-email'){
           const{to,subject,html,text}=data;
           if(!to||!subject||(!html&&!text)){res.writeHead(400);res.end(JSON.stringify({error:'to, subject, html/text gerekli'}));return;}
@@ -291,11 +307,28 @@ const server=http.createServer((req,res)=>{
           return;
         }
         
+        // === NEW ENDPOINTS ===
+        if(req.url==='/make-call'){
+          const{customer_id,phone}=data;
+          const result=await makeCall(customer_id,phone);
+          res.writeHead(result.ok?200:400);
+          res.end(JSON.stringify(result));
+          return;
+        }
+        
+        if(req.url==='/bulk-call'){
+          // Async başlat, hemen döndür
+          bulkCalls(data).then(r=>console.log('Bulk done:',r.total_queued)).catch(e=>console.error('Bulk err:',e));
+          res.writeHead(202);
+          res.end(JSON.stringify({ok:true,message:'Bulk job started',filter:data.filter,limit:data.limit}));
+          return;
+        }
+        
         if(req.url==='/vapi-webhook'){
           const type=data.message?.type||data.type;
           const callId=data.message?.call?.id||data.call?.id||data.callId;
           if((type==='end-of-call-report'||type==='call.ended')&&callId){
-            syncCall(callId).catch(e=>console.error(e.message));
+            syncCall(callId).catch(()=>{});
           }
           res.writeHead(200);res.end(JSON.stringify({ok:true}));return;
         }
@@ -310,30 +343,16 @@ const server=http.createServer((req,res)=>{
           const args=tool?.function?.arguments||{};
           const phone=(args.customer_phone||'').replace(/[^0-9]/g,'');
           const id=tool?.id||'x';
-          const msg='Merhaba! Ben Ayşe, Global Exbina. Demo hesap tamamen ücretsiz. Detay için yanıtlayın.';
+          const msg='Merhaba! Ben Ayşe, Global Exbina. Demo tamamen ücretsiz.';
           if(phone)wa('whatsapp:+'+phone,msg).catch(()=>{});
-          wa(ADMIN_WA,(phone?'Müşteri(+'+phone+'):\n':'')+msg).catch(()=>{});
           res.writeHead(200);res.end(JSON.stringify({results:[{toolCallId:id,result:'Gönderildi'}]}));return;
         }
         
-        if(req.url==='/twilio-webhook'){
-          const p=new URLSearchParams(body);
-          const from=p.get('From')||'';
-          const text=(p.get('Body')||'').toLowerCase().trim();
-          let reply='Merhaba! Ben Ayşe.\n1-Bot bilgisi\n2-Demo hesap\n3-Randevu';
-          if(text.includes('bot')||text==='1')reply='Global Exbina Pro Trading Bot %83 test başarı oranı. Demo ücretsiz!';
-          else if(text.includes('demo')||text==='2')reply='Demo ücretsiz! Yanıtlayın, ayarlayalım.';
-          else if(text.includes('randevu')||text==='3')reply='Randevu alındı! Saatinizi yazın.';
-          wa(from,reply).catch(()=>{});
-          wa(ADMIN_WA,'Gelen: '+from+'\n"'+text+'"').catch(()=>{});
-          res.writeHead(200);res.end(JSON.stringify({ok:true}));return;
-        }
-        
         res.writeHead(200);res.end(JSON.stringify({ok:true}));
-      }catch(e){console.error('handler err',e.message);res.writeHead(200);res.end(JSON.stringify({ok:true,err:e.message}));}
+      }catch(e){console.error('handler err',e.message);res.writeHead(500);res.end(JSON.stringify({err:e.message}));}
     });return;
   }
   res.writeHead(404);res.end('{}');
 });
 const PORT=process.env.PORT||3000;
-server.listen(PORT,()=>console.log('Ayse Server v5.2 port '+PORT+' | Gmail:'+(gmailTransporter?'ON':'OFF')));
+server.listen(PORT,()=>console.log('Ayse Server v5.3 - Outbound Calls ready - port '+PORT+' | Gmail:'+(gmailTransporter?'ON':'OFF')));
